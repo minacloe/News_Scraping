@@ -1,0 +1,5 @@
+requests>=2.31.0
+beautifulsoup4>=4.12.3
+pandas>=2.2.2
+serpapi>=0.6.0
+python-dotenv
