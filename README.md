@@ -52,4 +52,4 @@ python scraper_gui.py
 ---
 
 ## 📄 Lisensi
-Proyek ini bebas digunakan untuk keperluan pembelajaran dan pengembangan pribadi.
+Proyek ini dilisensikan dengan [MIT License](LICENSE).
