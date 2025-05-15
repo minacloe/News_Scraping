@@ -1,3 +1,4 @@
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
@@ -6,6 +7,7 @@ import requests, os, time, random, csv, pandas as pd, concurrent.futures
 from serpapi import GoogleSearch
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+import subprocess
 
 # ========== CONFIG ==========
 load_dotenv()
@@ -57,6 +59,7 @@ def search_google(query, log):
             if link and link not in urls:
                 urls.append(link)
                 log.insert(tk.END, f"{len(urls)}. {link}\n")
+                log.see(tk.END)
         start += step
         time.sleep(1)
     return urls
@@ -118,33 +121,49 @@ def improved_scrape(url, lokasi_filter):
     except Exception as e:
         return "Gagal", url, f"Error: {e}", "❌ Error"
 
-def scrape_all(urls, lokasi_filter, log):
+def scrape_all(urls, lokasi_filter, log, progressbar):
     results = []
+    total = len(urls)
+    completed = 0
+    progressbar["maximum"] = total
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(improved_scrape, url, lokasi_filter): url for url in urls}
         for f in concurrent.futures.as_completed(futures):
+            completed += 1
+            progressbar["value"] = completed
             try:
                 res = f.result()
-                log.insert(tk.END, f"✔ {res[0]}\n")
+                log.insert(tk.END, f"✔ [{completed}/{total}] {res[0]}\n")
+                log.see(tk.END)
                 results.append(res)
             except Exception as e:
+                log.insert(tk.END, f"❌ [{completed}/{total}] Error scraping: {futures[f]}\n")
+                log.see(tk.END)
                 results.append(["Error", futures[f], f"Error: {e}", "❌"])
     return results
+
+def open_folder(path):
+    if os.name == "nt":
+        subprocess.Popen(f'explorer "{path}"')
 
 def save_files(data, keyword, site):
     folder = site.replace('.', '_')
     os.makedirs(folder, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     df = pd.DataFrame(data, columns=["Title", "URL", "Konten", "Lokasi Cocok"])
-    df.to_excel(os.path.join(folder, f"{keyword}_{timestamp}.xlsx"), index=False)
+    excel_path = os.path.join(folder, f"{keyword}_{timestamp}.xlsx")
+    df.to_excel(excel_path, index=False)
     with open(os.path.join(folder, f"{keyword}_{timestamp}.csv"), "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["Title", "URL", "Konten", "Lokasi Cocok"])
         writer.writerows(data)
+    return folder
 
 # ========== GUI ==========
 def start_scraping():
     log.delete(1.0, tk.END)
+    progress["value"] = 0
     try:
         start = datetime.strptime(start_entry.get(), "%Y-%m-%d").strftime("%Y-%m-%d")
         end = datetime.strptime(end_entry.get(), "%Y-%m-%d").strftime("%Y-%m-%d")
@@ -163,19 +182,24 @@ def start_scraping():
 
     query = generate_query(start, end, keyword, site, spesifik)
     log.insert(tk.END, f"🔍 Query: {query}\n\n")
+    log.see(tk.END)
     urls = search_google(query, log)
     if not urls:
         log.insert(tk.END, "❌ Tidak ada hasil ditemukan.\n")
         return
     log.insert(tk.END, f"\n🔄 Mulai scraping {len(urls)} URL...\n")
-    results = scrape_all(urls, lokasi, log)
-    save_files(results, keyword, site)
-    log.insert(tk.END, f"\n📁 Hasil disimpan.\n")
+    log.see(tk.END)
+    results = scrape_all(urls, lokasi, log, progress)
+    folder_path = save_files(results, keyword, site)
+    messagebox.showinfo("Selesai", "Scraping selesai dan hasil disimpan.")
+    open_folder(folder_path)
+    log.insert(tk.END, f"\n📁 Hasil disimpan ke folder: {folder_path}\n")
+    log.see(tk.END)
 
 # GUI Layout
 root = tk.Tk()
 root.title("Scraper Berita - Tkinter")
-root.geometry("700x500")
+root.geometry("700x550")
 
 frame = ttk.Frame(root, padding="10")
 frame.pack(fill="both", expand=True)
@@ -203,12 +227,15 @@ lokasi_entry.grid(row=4, column=1, sticky="ew")
 specific_var = tk.BooleanVar()
 ttk.Checkbutton(frame, text="Pencarian Spesifik (Exact match)", variable=specific_var).grid(row=5, columnspan=2, sticky="w")
 
-ttk.Button(frame, text="Mulai Scraping", command=start_scraping).grid(row=6, columnspan=2, pady=10)
+ttk.Button(frame, text="Mulai Scraping", command=lambda: threading.Thread(target=start_scraping).start()).grid(row=6, columnspan=2, pady=5)
+
+progress = ttk.Progressbar(frame, mode='determinate')
+progress.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
 log = tk.Text(frame, height=15, wrap="word")
-log.grid(row=7, column=0, columnspan=2, sticky="nsew")
+log.grid(row=8, column=0, columnspan=2, sticky="nsew")
 
 frame.columnconfigure(1, weight=1)
-frame.rowconfigure(7, weight=1)
+frame.rowconfigure(8, weight=1)
 
 root.mainloop()
