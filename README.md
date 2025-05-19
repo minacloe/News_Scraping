@@ -25,7 +25,8 @@ Aplikasi ini digunakan untuk melakukan scraping berita dari Google menggunakan S
    ```bash
    pip install -r requirements.txt
    ```
-
+4. Buka [SerpAPI](https://serpapi.com/) dan registrasi 
+5. Salin API Key dan masukkan ke .env
 ---
 
 ## ▶️ Menjalankan Program
